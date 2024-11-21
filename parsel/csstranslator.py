@@ -28,7 +28,8 @@ class XPathExpr(OriginalXPathExpr):
         return path
 
 class TranslatorProtocol(Protocol):
-    pass
+    def css_to_xpath(self, css: str) -> str:
+        ...
 
 class TranslatorMixin:
     """This mixin adds support to CSS pseudo elements via dynamic dispatch.
@@ -60,6 +61,7 @@ class TranslatorMixin:
             raise ExpressionError("Expected a string value for ::attr(), got %r" % function.arguments[0])
         xpath = XPathExpr.from_xpath(xpath)
         xpath.attribute = function.arguments[0]
+        xpath.textnode = False
         return xpath
 
     def xpath_text_simple_pseudo_element(self, xpath: OriginalXPathExpr) -> XPathExpr:
@@ -69,10 +71,32 @@ class TranslatorMixin:
         return xpath
 
 class GenericTranslator(TranslatorMixin, OriginalGenericTranslator):
-    pass
+    def xpath_pseudo_element(self, xpath: OriginalXPathExpr, pseudo_element: PseudoElement) -> OriginalXPathExpr:
+        if isinstance(pseudo_element, FunctionalPseudoElement):
+            method = f'xpath_{pseudo_element.name}_functional_pseudo_element'
+            if not hasattr(self, method):
+                raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}()')
+            method = getattr(self, method)
+            return method(xpath, pseudo_element)
+        method = f'xpath_{pseudo_element.name}_simple_pseudo_element'
+        if not hasattr(self, method):
+            raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}')
+        method = getattr(self, method)
+        return method(xpath)
 
 class HTMLTranslator(TranslatorMixin, OriginalHTMLTranslator):
-    pass
+    def xpath_pseudo_element(self, xpath: OriginalXPathExpr, pseudo_element: PseudoElement) -> OriginalXPathExpr:
+        if isinstance(pseudo_element, FunctionalPseudoElement):
+            method = f'xpath_{pseudo_element.name}_functional_pseudo_element'
+            if not hasattr(self, method):
+                raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}()')
+            method = getattr(self, method)
+            return method(xpath, pseudo_element)
+        method = f'xpath_{pseudo_element.name}_simple_pseudo_element'
+        if not hasattr(self, method):
+            raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}')
+        method = getattr(self, method)
+        return method(xpath)
 _translator = HTMLTranslator()
 
 @lru_cache(maxsize=5000)
