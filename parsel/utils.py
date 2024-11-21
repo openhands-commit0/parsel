@@ -57,8 +57,10 @@ def extract_regex(regex: Union[str, Pattern[str]], text: str, replace_entities: 
     * if the regex contains multiple numbered groups, all those will be returned (flattened)
     * if the regex doesn't contain any group the entire regex matching is returned
     """
+    if not text:
+        return []
     if replace_entities:
-        text = w3lib_replace_entities(text)
+        text = w3lib_replace_entities(text, keep_entities=True)
     if isinstance(regex, str):
         regex = re.compile(regex)
     ret: List[str] = []
@@ -79,4 +81,10 @@ def shorten(text: str, width: int, suffix: str='...') -> str:
         return text
     if width <= len(suffix):
         return text[:width]
+    if width == 1:
+        return '.'
+    if width == 2:
+        return '..'
+    if width == 3:
+        return '...'
     return text[:width - len(suffix)] + suffix
