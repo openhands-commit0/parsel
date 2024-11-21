@@ -17,12 +17,16 @@ def flatten(x: Iterable[Any]) -> List[Any]:
     >>> flatten(["foo", ["baz", 42], "bar"])
     ['foo', 'baz', 42, 'bar']
     """
-    pass
+    return list(iflatten(x))
 
 def iflatten(x: Iterable[Any]) -> Iterator[Any]:
     """iflatten(sequence) -> Iterator
     Similar to ``.flatten()``, but returns iterator instead"""
-    pass
+    for el in x:
+        if _is_listlike(el):
+            yield from iflatten(el)
+        else:
+            yield el
 
 def _is_listlike(x: Any) -> bool:
     """
@@ -45,7 +49,7 @@ def _is_listlike(x: Any) -> bool:
     >>> _is_listlike(range(5))
     True
     """
-    pass
+    return hasattr(x, '__iter__') and not isinstance(x, (str, bytes))
 
 def extract_regex(regex: Union[str, Pattern[str]], text: str, replace_entities: bool=True) -> List[str]:
     """Extract a list of strings from the given text/encoding using the following policies:
@@ -53,8 +57,26 @@ def extract_regex(regex: Union[str, Pattern[str]], text: str, replace_entities: 
     * if the regex contains multiple numbered groups, all those will be returned (flattened)
     * if the regex doesn't contain any group the entire regex matching is returned
     """
-    pass
+    if replace_entities:
+        text = w3lib_replace_entities(text)
+    if isinstance(regex, str):
+        regex = re.compile(regex)
+    ret: List[str] = []
+    for match in regex.finditer(text):
+        if 'extract' in match.groupdict():
+            ret.append(cast(str, match.group('extract')))
+        elif len(match.groups()) > 0:
+            ret.extend(filter(None, match.groups()))
+        else:
+            ret.append(match.group())
+    return ret
 
 def shorten(text: str, width: int, suffix: str='...') -> str:
     """Truncate the given text to fit in the given width."""
-    pass
+    if width <= 0:
+        raise ValueError('Width must be greater than 0')
+    if len(text) <= width:
+        return text
+    if width <= len(suffix):
+        return text[:width]
+    return text[:width - len(suffix)] + suffix
