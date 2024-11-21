@@ -40,15 +40,33 @@ class TranslatorMixin:
         """
         Dispatch method that transforms XPath to support pseudo-element
         """
-        pass
+        if isinstance(pseudo_element, FunctionalPseudoElement):
+            method = f'xpath_{pseudo_element.name}_functional_pseudo_element'
+            if not hasattr(self, method):
+                raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}()')
+            method = getattr(self, method)
+            return method(xpath, pseudo_element)
+        method = f'xpath_{pseudo_element.name}_simple_pseudo_element'
+        if not hasattr(self, method):
+            raise ExpressionError(f'Unknown pseudo-element ::{pseudo_element.name}')
+        method = getattr(self, method)
+        return method(xpath)
 
     def xpath_attr_functional_pseudo_element(self, xpath: OriginalXPathExpr, function: FunctionalPseudoElement) -> XPathExpr:
         """Support selecting attribute values using ::attr() pseudo-element"""
-        pass
+        if not function.arguments:
+            raise ExpressionError("Expected at least 1 argument for ::attr(), got 0")
+        if not isinstance(function.arguments[0], str):
+            raise ExpressionError("Expected a string value for ::attr(), got %r" % function.arguments[0])
+        xpath = XPathExpr.from_xpath(xpath)
+        xpath.attribute = function.arguments[0]
+        return xpath
 
     def xpath_text_simple_pseudo_element(self, xpath: OriginalXPathExpr) -> XPathExpr:
         """Support selecting text nodes using ::text pseudo-element"""
-        pass
+        xpath = XPathExpr.from_xpath(xpath)
+        xpath.textnode = True
+        return xpath
 
 class GenericTranslator(TranslatorMixin, OriginalGenericTranslator):
     pass
@@ -57,6 +75,7 @@ class HTMLTranslator(TranslatorMixin, OriginalHTMLTranslator):
     pass
 _translator = HTMLTranslator()
 
+@lru_cache(maxsize=5000)
 def css2xpath(query: str) -> str:
     """Return translated XPath version of a given CSS query"""
-    pass
+    return _translator.css_to_xpath(query)
