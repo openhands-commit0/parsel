@@ -43,17 +43,22 @@ def _get_root_type(root: Any, input_type: Optional[str]=None) -> str:
     """Get root type based on root object and input type."""
     if input_type is not None:
         return input_type
-    elif isinstance(root, (etree._Element, etree._ElementTree)):
-        return 'xml'
     elif isinstance(root, (dict, list)):
         return 'json'
+    elif isinstance(root, (etree._Element, etree._ElementTree)):
+        if isinstance(root, etree._Element) and root.tag == 'html':
+            return 'html'
+        return 'xml'
     else:
         return 'html'
 
 def _get_root_and_type_from_text(text: str, input_type: Optional[str]=None, base_url: Optional[str]=None, huge_tree: bool=LXML_SUPPORTS_HUGE_TREE) -> Tuple[Any, str]:
     """Get root node and type from text input."""
     if input_type == 'json':
-        return json.loads(text), 'json'
+        try:
+            return json.loads(text), 'json'
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {str(e)}")
     elif input_type == 'text':
         return text, 'text'
     else:
@@ -64,7 +69,10 @@ def _get_root_and_type_from_text(text: str, input_type: Optional[str]=None, base
 def _get_root_and_type_from_bytes(body: bytes, encoding: str='utf8', input_type: Optional[str]=None, base_url: Optional[str]=None, huge_tree: bool=LXML_SUPPORTS_HUGE_TREE) -> Tuple[Any, str]:
     """Get root node and type from bytes input."""
     if input_type == 'json':
-        return json.loads(body.decode(encoding)), 'json'
+        try:
+            return json.loads(body.decode(encoding)), 'json'
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {str(e)}")
     elif input_type == 'text':
         return body.decode(encoding), 'text'
     else:
@@ -84,6 +92,8 @@ def create_root_node(text: str, parser_cls: Type[_ParserType], base_url: Optiona
         root = etree.fromstring(text.encode(encoding), parser=parser, base_url=base_url)
     if root is None:
         root = etree.Element('html')
+    if base_url is not None:
+        root.base = base_url
     return root
 
 class SelectorList(List[_SelectorType]):
@@ -410,7 +420,16 @@ class Selector:
         else:
             try:
                 method = _ctgroup[self.type or 'html']['_tostring_method']
-                return etree.tostring(self.root, method=method, encoding='unicode', with_tail=False)
+                if isinstance(self.root, etree._Element):
+                    return etree.tostring(self.root, method=method, encoding='unicode', with_tail=False)
+                elif isinstance(self.root, bool):
+                    return str(self.root)
+                elif isinstance(self.root, str):
+                    return self.root
+                elif self.root is None:
+                    return ''
+                else:
+                    return str(self.root)
             except (AttributeError, TypeError):
                 if self.root is True or self.root is False:
                     return str(self.root)
@@ -440,6 +459,10 @@ class Selector:
         """
         if self.type == 'json':
             raise ValueError('Namespaces cannot be removed from JSON data')
+        if self.type == 'text':
+            raise ValueError('Namespaces cannot be removed from text data')
+        if not isinstance(self.root, etree._Element):
+            raise ValueError('Cannot remove namespaces from non-XML/HTML data')
         for el in self.root.iter('*'):
             if el.tag.startswith('{'):
                 el.tag = el.tag.split('}', 1)[1]
@@ -454,7 +477,11 @@ class Selector:
         """
         if self.type == 'json':
             raise ValueError('Cannot remove nodes from JSON data')
+        if self.type == 'text':
+            raise ValueError('Cannot remove nodes from text data')
         if self.root is None:
+            raise CannotRemoveElementWithoutRoot('Element has no root')
+        if not isinstance(self.root, etree._Element):
             raise CannotRemoveElementWithoutRoot('Element has no root')
         parent = self.root.getparent()
         if parent is None:
@@ -467,8 +494,12 @@ class Selector:
         """
         if self.type == 'json':
             raise ValueError('Cannot drop nodes from JSON data')
+        if self.type == 'text':
+            raise ValueError('Cannot drop nodes from text data')
         if self.root is None:
             raise CannotDropElementWithoutParent('Element has no root')
+        if not isinstance(self.root, etree._Element):
+            raise CannotDropElementWithoutRoot('Element has no root')
         parent = self.root.getparent()
         if parent is None:
             raise CannotDropElementWithoutParent('Element has no parent')
